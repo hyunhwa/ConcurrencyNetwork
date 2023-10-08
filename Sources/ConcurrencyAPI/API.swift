@@ -5,7 +5,7 @@
 //  Created by hyunhwa on 2023/06/01.
 //
 
-import Common
+import ConcurrencyNetwork
 import Foundation
 
 /// API 요청 시 포함될 기본 헤더

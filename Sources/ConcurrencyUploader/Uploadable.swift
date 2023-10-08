@@ -5,7 +5,7 @@
 //  Created by hyunhwa on 2023/07/04.
 //
 
-import Common
+import ConcurrencyNetwork
 import Foundation
 
 /// 업로드할 파일의 최소한 구성되어야할 정보

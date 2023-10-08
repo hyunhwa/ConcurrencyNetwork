@@ -5,7 +5,7 @@
 //  Created by hyunhwa on 2023/06/22.
 //
 
-import Common
+import ConcurrencyNetwork
 import Foundation
 
 /// 다운로드 가능한 파일의 최소한으로 구성되어야할 정보
@@ -42,7 +42,7 @@ public extension Downloadable {
     }
     
     var timeoutInterval: TimeInterval {
-        10
+        60
     }
     
     /// 다운로드 이어받기 지원을 위해 GET 방식으로 고정

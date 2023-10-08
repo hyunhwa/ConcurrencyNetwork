@@ -9,28 +9,57 @@ import XCTest
 @testable import ConcurrencyDownloader
 
 final class DownloaderTests: XCTestCase {
-
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    var downloadImageInfo: DownloadableDogImageInfo?
+    
+    private enum DownloadTestError: Error {
+        case noImageURL
+        case noDownloadInfo
     }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
-    }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
+    
+    override func setUp() async throws {
+        let response = try await DogAPI.randomImage.request(
+            responseAs: RandomImageResponse.self
+        )
+        dump(response)
+        XCTAssertTrue(response.status == "success")
+        if let imageURL = URL(string: response.message) {
+            self.downloadImageInfo = DownloadableDogImageInfo(fileURL: imageURL)
+        } else {
+            XCTAssertThrowsError(DownloadTestError.noImageURL)
         }
     }
 
+    func testExample() async throws {
+        guard let downloadImageInfo = downloadImageInfo else {
+            XCTAssertThrowsError(DownloadTestError.noDownloadInfo)
+            return
+        }
+        
+        let downloader = Downloader(
+            progressInterval: 1,
+            maxActiveTask: 1
+        )
+        
+        for try await event in try await downloader.events(
+            fileInfo: downloadImageInfo
+        ) {
+            switch event {
+            case let .update(currentBytes, totalBytes):
+                if currentBytes > totalBytes {
+                    XCTAssertTrue(
+                        currentBytes <= totalBytes,
+                        "다운로드된 데이터가 예상 다운로드 데이터보다 큼"
+                    )
+                }
+            case let .completed(data, downloadInfo):
+                XCTAssertTrue(
+                    data.count > 0,
+                    "다운로드된 임시 로컬파일의 데이터가 없음"
+                )
+                XCTAssertTrue(downloadInfo.isCompleted, "다운로드 완료 상태")
+            case let .start(index, _):
+                print("index : \(index)")
+            }
+        }
+    }
 }

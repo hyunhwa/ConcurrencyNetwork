@@ -45,7 +45,7 @@ extension SampleAPI: API {
         switch self {
         case .getSampleData,
             .saveSampleData:
-            return "/RealData"
+            return "/SampleData"
         }
     }
     ...
@@ -55,7 +55,9 @@ extension SampleAPI: API {
 async 방식으로 응답 데이터(Codable)를 가져올 수 있습니다.
 
 ```swift
-struct SampleResponse: Codable, Equatable { ... }
+struct SampleResponse: Codable, Equatable { 
+    ... 
+}
 
 let response = try await SampleAPI.getSampleData.request(responseAs: SampleResponse.self)
 ```
