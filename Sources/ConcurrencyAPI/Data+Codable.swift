@@ -17,25 +17,6 @@ extension Data {
         String(data: self, encoding: .utf8)
     }
     
-    /// Codable 객체 디코딩
-    /// - Parameters:
-    ///   - _: 변환할 디코딩 객체 타입
-    ///   - dateFormat: Date 타입 포맷 문자열
-    /// - Returns: 디코딩된 객체
-    func decodedObject<T: Codable>(
-        type _: T.Type,
-        dateFormat: String = "yyyy-MM-dd HH:mm:ss"
-    ) throws -> T {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = dateFormat
-        dateFormatter.locale = Locale(identifier: "ko")
-        
-        let jsonDecoder = JSONDecoder()
-        jsonDecoder.dateDecodingStrategy = .formatted(dateFormatter)
-        
-        return try jsonDecoder.decode(T.self, from: self)
-    }
-    
     /// API 내에서 사용되는 Codable 객체 디코더
     /// - Parameters:
     ///   - _: 디코딩하려는 객체 타입
@@ -56,5 +37,24 @@ extension Data {
         } catch {
             throw APIError.decodingError
         }
+    }
+    
+    /// Codable 객체 디코딩
+    /// - Parameters:
+    ///   - _: 변환할 디코딩 객체 타입
+    ///   - dateFormat: Date 타입 포맷 문자열
+    /// - Returns: 디코딩된 객체
+    private func decodedObject<T: Codable>(
+        type _: T.Type,
+        dateFormat: String = "yyyy-MM-dd HH:mm:ss"
+    ) throws -> T {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = dateFormat
+        dateFormatter.locale = Locale(identifier: "ko")
+        
+        let jsonDecoder = JSONDecoder()
+        jsonDecoder.dateDecodingStrategy = .formatted(dateFormatter)
+        
+        return try jsonDecoder.decode(T.self, from: self)
     }
 }

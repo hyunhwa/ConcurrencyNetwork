@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import API
+@testable import ConcurrencyAPI
 
 final class APITests: XCTestCase {
     func testExample() throws {

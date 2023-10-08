@@ -17,8 +17,6 @@ public enum DownloadError: Error, Equatable {
     case invalideFileURL
     /// 로컬 파일에 저장된 데이터가 없음
     case noDataInLocal
-    /// DRM 모듈을 적용할 수 없음
-    case notSupportDRM
     /// 서버에서 오류가 발생됨
     case serverError
 
@@ -28,7 +26,6 @@ public enum DownloadError: Error, Equatable {
             (.invalideURL, .invalideURL),
             (.invalideFileURL, .invalideFileURL),
             (.noDataInLocal, .noDataInLocal),
-            (.notSupportDRM, .notSupportDRM),
             (.serverError, .serverError):
             return true
         default:

@@ -242,10 +242,8 @@ public actor Uploader: NSObject {
         uploadInfos?[index].continuation?.finish(throwing: UploadError.canceledByUser)
     }
     
-    // MARK: Internal Methods
-    
     /// 업로드를 위한 Root 폴더 URL
-    var uploadFolderURL: URL {
+    private var uploadFolderURL: URL {
         let directoryPaths = NSSearchPathForDirectoriesInDomains(
             .libraryDirectory,
             .userDomainMask,
@@ -259,7 +257,7 @@ public actor Uploader: NSObject {
     /// 데이터 요청 객체 생성 (로거 레벨에 따라 데이터를 표시하기 위해 업로더에 위치시킴)
     /// - Parameter fileInfo: 데이터 요청에 필요한 파일 정보
     /// - Returns: 데이터 요청 객체
-    func request(
+    private func request(
         fileInfo: any Uploadable,
         boundary: String
     ) async throws -> URLRequest {
@@ -279,7 +277,7 @@ public actor Uploader: NSObject {
     
     /// 다음 업로드할 파일이 있으면 업로드 진행
     /// - Parameter uploadInfo: 업로드할 파일 정보를 특정하고 싶은 경우 설정
-    func runNextIfNeeded(_ uploadInfo: UploadInfo? = nil) {
+    private func runNextIfNeeded(_ uploadInfo: UploadInfo? = nil) {
         let activeTaskCount = uploadInfos?.activeTaskCount ?? 0
         guard activeTaskCount < maxActiveTask,
               let uploadInfo = (uploadInfo ?? uploadInfos?.first { $0.isSuspended })
@@ -293,8 +291,6 @@ public actor Uploader: NSObject {
         
         resume(task: uploadInfo.task)
     }
-    
-    // MARK: Private Methods
     
     /// 업로드 폴더가 필요한 경우 생성
     /// - Parameter willReset: 업로드 폴더 초기화 필요 (true 시 삭제 후 재생성)
@@ -472,7 +468,7 @@ public actor Uploader: NSObject {
     }
 }
 
-// MARK: - URLSessionDelegate
+// MARK: - URLSessionTaskDelegate
 extension Uploader: URLSessionTaskDelegate {
     public nonisolated
     func urlSession(
@@ -569,6 +565,7 @@ extension Uploader: URLSessionTaskDelegate {
     }
 }
  
+// MARK: - URLSessionDataDelegate
 extension Uploader: URLSessionDataDelegate {
     public nonisolated
     func urlSession(

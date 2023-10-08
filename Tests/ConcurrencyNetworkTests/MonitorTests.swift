@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import Monitor
+@testable import ConcurrencyMonitor
 
 final class MonitorTests: XCTestCase {
 

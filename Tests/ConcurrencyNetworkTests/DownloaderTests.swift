@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import Downloader
+@testable import ConcurrencyDownloader
 
 final class DownloaderTests: XCTestCase {
 

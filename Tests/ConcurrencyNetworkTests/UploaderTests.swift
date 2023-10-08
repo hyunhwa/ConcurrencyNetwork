@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import Uploader
+@testable import ConcurrencyUploader
 
 final class UploaderTests: XCTestCase {
 

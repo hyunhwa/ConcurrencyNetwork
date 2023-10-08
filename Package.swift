@@ -15,74 +15,51 @@ let package = Package(
         .library(
             name: "ConcurrencyNetwork",
             targets: [
-                "API",
-                "Downloader",
-                "Monitor",
-                "Uploader"
+                "ConcurrencyAPI",
+                "ConcurrencyDownloader",
+                "ConcurrencyMonitor",
+                "ConcurrencyUploader"
             ]
-        ),
-        .library(
-            name: "ConcurrencyAPI",
-            targets: [
-                "API"
-            ]
-        ),
-        .library(
-            name: "ConcurrencyDownloader",
-            targets: [
-                "Downloader"
-            ]
-        ),
-        .library(
-            name: "ConcurrencyMonitor",
-            targets: [
-                "Monitor"
-            ]
-        ),
-        .library(
-            name: "ConcurrencyUploader",
-            targets: [
-                "Uploader"
-            ]
-        ),
+        )
     ],
     dependencies: [ ],
     targets: [
         .target(
-            name: "Common",
+            name: "ConcurrencyNetwork",
             dependencies: []
         ),
         .target(
-            name: "API",
+            name: "ConcurrencyAPI",
             dependencies: [
-                "Common"
+                "ConcurrencyNetwork"
             ]
         ),
         .target(
-            name: "Downloader",
+            name: "ConcurrencyDownloader",
             dependencies: [
-                "Common"
+                "ConcurrencyNetwork"
             ]
         ),
         .target(
-            name: "Monitor",
+            name: "ConcurrencyMonitor",
             dependencies: [
-                "Common"
+                "ConcurrencyNetwork"
             ]
         ),
         .target(
-            name: "Uploader",
+            name: "ConcurrencyUploader",
             dependencies: [
-                "Common"
+                "ConcurrencyNetwork"
             ]
         ),
         .testTarget(
             name: "ConcurrencyNetworkTests",
             dependencies: [
-                "API",
-                "Downloader",
-                "Monitor",
-                "Uploader"
+                "ConcurrencyAPI",
+                "ConcurrencyDownloader",
+                "ConcurrencyMonitor",
+                "ConcurrencyNetwork",
+                "ConcurrencyUploader"
             ]
         ),
     ]

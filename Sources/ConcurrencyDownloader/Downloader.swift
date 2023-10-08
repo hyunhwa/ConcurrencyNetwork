@@ -13,7 +13,7 @@ import Foundation
 ///
 /// 단일 다운로드와 멀티 다운로드를 모두 지원합니다.
 ///
-/// Downloadble을 만족하는 파일 객체를 다음과 같이 정의합니다.
+/// Downloadable을 만족하는 파일 객체를 다음과 같이 정의합니다.
 /// ```swift
 /// struct DownloadableImageFileInfo {
 ///     var fileUrlString: String
@@ -348,7 +348,7 @@ public actor Downloader: NSObject {
         }
     }
     
-    /// destinationURL 있는 경우 다운로드 완료 데이터(+ DRM) 저장
+    /// 다운로드 파일 데이터 저장
     private func saveToLocalFileURL(
         withTask task: URLSessionDownloadTask,
         data: Data
