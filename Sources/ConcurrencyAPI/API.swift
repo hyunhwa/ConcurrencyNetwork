@@ -96,10 +96,6 @@ public extension API {
         .shared
     }
     
-    var headers: [String: String]? {
-        defaultHeaders
-    }
-    
     var timeoutInterval: TimeInterval {
         10
     }

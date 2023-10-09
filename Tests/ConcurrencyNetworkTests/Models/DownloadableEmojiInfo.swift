@@ -8,11 +8,11 @@
 import Foundation
 import ConcurrencyDownloader
 
-struct DownloadableDogImageInfo {
+struct DownloadableEmojiInfo {
     let fileURL: URL
 }
 
-extension DownloadableDogImageInfo: Downloadable {
+extension DownloadableEmojiInfo: Downloadable {
     var directoryURL: URL {
         let directoryPaths = NSSearchPathForDirectoriesInDomains(
             .libraryDirectory,
