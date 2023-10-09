@@ -268,7 +268,7 @@ public actor Uploader: NSObject {
                 timeoutInterval: fileInfo.timeoutInterval
             )
             request.allHTTPHeaderFields = fileInfo.header(with: boundary)
-            request.httpMethod = fileInfo.method.rawValue
+            request.httpMethod = fileInfo.httpMethod.rawValue
             return request
         } catch {
             throw UploadError.invalidURL

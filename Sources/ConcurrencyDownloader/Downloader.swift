@@ -289,7 +289,7 @@ public actor Downloader: NSObject {
                 timeoutInterval: fileInfo.timeoutInterval
             )
             request.allHTTPHeaderFields = fileInfo.headers
-            request.httpMethod = fileInfo.method.rawValue
+            request.httpMethod = fileInfo.httpMethod.rawValue
             return request
         } catch {
             throw DownloadError.invalideURL

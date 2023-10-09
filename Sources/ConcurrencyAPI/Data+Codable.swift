@@ -44,7 +44,7 @@ extension Data {
     ///   - _: 변환할 디코딩 객체 타입
     ///   - dateFormat: Date 타입 포맷 문자열
     /// - Returns: 디코딩된 객체
-    private func decodedObject<T: Codable>(
+    public func decodedObject<T: Codable>(
         type _: T.Type,
         dateFormat: String = "yyyy-MM-dd HH:mm:ss"
     ) throws -> T {

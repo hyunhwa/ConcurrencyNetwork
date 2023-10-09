@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import ConcurrencyNetwork
 import ConcurrencyAPI
 
 enum DogAPI {
@@ -22,7 +21,7 @@ extension DogAPI: API {
         nil
     }
     
-    var method: HttpMethod {
+    var httpMethod: HttpMethod {
         return .get
     }
     

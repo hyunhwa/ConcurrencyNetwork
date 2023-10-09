@@ -20,36 +20,52 @@ let package = Package(
                 "ConcurrencyMonitor",
                 "ConcurrencyUploader"
             ]
+        ),
+        .library(
+            name: "ConcurrencyAPI",
+            targets: [
+                "ConcurrencyAPI"
+            ]
+        ),
+        .library(
+            name: "ConcurrencyDownloader",
+            targets: [
+                "ConcurrencyDownloader"
+            ]
+        ),
+        .library(
+            name: "ConcurrencyMonitor",
+            targets: [
+                "ConcurrencyMonitor"
+            ]
+        ),
+        .library(
+            name: "ConcurrencyUploader",
+            targets: [
+                "ConcurrencyUploader"
+            ]
         )
     ],
     dependencies: [ ],
     targets: [
         .target(
-            name: "ConcurrencyNetwork",
-            dependencies: []
-        ),
-        .target(
             name: "ConcurrencyAPI",
-            dependencies: [
-                "ConcurrencyNetwork"
-            ]
+            dependencies: []
         ),
         .target(
             name: "ConcurrencyDownloader",
             dependencies: [
-                "ConcurrencyNetwork"
+                "ConcurrencyAPI"
             ]
         ),
         .target(
             name: "ConcurrencyMonitor",
-            dependencies: [
-                "ConcurrencyNetwork"
-            ]
+            dependencies: []
         ),
         .target(
             name: "ConcurrencyUploader",
             dependencies: [
-                "ConcurrencyNetwork"
+                "ConcurrencyAPI"
             ]
         ),
         .testTarget(
@@ -58,7 +74,6 @@ let package = Package(
                 "ConcurrencyAPI",
                 "ConcurrencyDownloader",
                 "ConcurrencyMonitor",
-                "ConcurrencyNetwork",
                 "ConcurrencyUploader"
             ]
         ),

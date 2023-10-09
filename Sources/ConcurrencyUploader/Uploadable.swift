@@ -5,7 +5,7 @@
 //  Created by hyunhwa on 2023/07/04.
 //
 
-import ConcurrencyNetwork
+import ConcurrencyAPI
 import Foundation
 
 /// 업로드할 파일의 최소한 구성되어야할 정보
@@ -55,7 +55,7 @@ public extension Uploadable {
     }
     
     /// 업로드 시 POST 방식 고정
-    var method: HttpMethod {
+    var httpMethod: HttpMethod {
         .post
     }
     

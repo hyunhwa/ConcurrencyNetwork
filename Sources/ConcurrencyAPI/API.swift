@@ -5,8 +5,16 @@
 //  Created by hyunhwa on 2023/06/01.
 //
 
-import ConcurrencyNetwork
 import Foundation
+
+/// 데이터 통신 방식
+/// String 타입으로 case 와 동일한 rawValue 반환
+public enum HttpMethod: String, Equatable {
+    case get
+    case post
+    case put
+    case delete
+}
 
 /// API 요청 시 포함될 기본 헤더
 ///
@@ -74,7 +82,7 @@ public protocol API {
     /// 데이터 요청 헤더 (기본 요청 urlEncoded, 기본 응답 json)
     var headers: [String: String]? { get }
     /// GET or POST 와 같이 통신 방식 설정
-    var method: HttpMethod { get }
+    var httpMethod: HttpMethod { get }
     /// 쿼리 파라미터
     var params: [String: String]? { get }
     /// 파라미터를 제외한 '/' 이하 주소
@@ -198,10 +206,10 @@ public extension API {
         }
         
         var urlRequest = URLRequest(url: url, timeoutInterval: timeoutInterval)
-        urlRequest.httpMethod = method.rawValue
+        urlRequest.httpMethod = httpMethod.rawValue
         urlRequest.allHTTPHeaderFields = mergingHeaders
         
-        guard method != .get else { return urlRequest }
+        guard httpMethod != .get else { return urlRequest }
         
         do {
             urlRequest.httpBody = try httpBody(url: url)
