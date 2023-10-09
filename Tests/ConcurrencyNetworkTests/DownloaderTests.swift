@@ -21,14 +21,13 @@ final class DownloaderTests: XCTestCase {
     }
     
     override func setUp() async throws {
-        let response = try await GithubAPI
+        let (object, _) = try await GithubAPI
             .emojis
-            .request(
-                responseAs: [String: String].self
-            )
-        XCTAssertNotNil(response)
+            .request()
+            .response([String: String].self)
+        XCTAssertNotNil(object)
         
-        let emojiInfos: [DownloadableEmojiInfo] = response.compactMap { (key, value) in
+        let emojiInfos: [DownloadableEmojiInfo] = object.compactMap { (key, value) in
             guard let imageURL = URL(string: value)
             else { return nil }
             return DownloadableEmojiInfo(fileURL: imageURL)

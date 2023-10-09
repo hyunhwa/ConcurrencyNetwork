@@ -15,28 +15,26 @@ import Foundation
 ///
 /// Downloadable을 만족하는 파일 객체를 다음과 같이 정의합니다.
 /// ```swift
-/// struct DownloadableImageFileInfo {
-///     var fileUrlString: String
+/// struct DownloadableObject {
+///     let fileURL: URL
 /// }
 ///
-/// extension DownloadableImageFileInfo: Downloadable {
-///     var sourceURL: URL {
-///         get throws {
-///             URL(string: fileUrlString)!
-///         }
-///     }
-///
-///     var headers: [String: String]? {
-///         nil
-///     }
-///
+/// extension DownloadableObject: Downloadable {
 ///     var directoryURL: URL {
 ///         let directoryPaths = NSSearchPathForDirectoriesInDomains(
-///             searchPathDirectory,
+///             .libraryDirectory,
 ///             .userDomainMask,
 ///             true
 ///         )
-///         return URL(fileURLWithPath: directoryPaths.first!)
+///
+///         let directoryURL = URL(fileURLWithPath: directoryPaths.first!)
+///         return directoryURL.appendingPathComponent("ConcurrencyDownload")
+///     }
+///
+///     var sourceURL: URL {
+///         get throws {
+///             fileURL
+///         }
 ///     }
 /// }
 /// ```
@@ -57,7 +55,7 @@ import Foundation
 ///
 /// 멀티 다운로드 이벤트를 수신하실 때는 다음과 같이 호출 가능합니다.
 /// ```swift
-/// let downloader = Downloader(logLevel: .info)
+/// let downloader = Downloader()
 /// let fileInfos = [
 ///     mockupDownloadableVideoInfo1,
 ///     mockupDownloadableVideoInfo2
@@ -292,7 +290,7 @@ public actor Downloader: NSObject {
             request.httpMethod = fileInfo.httpMethod.rawValue
             return request
         } catch {
-            throw DownloadError.invalideURL
+            throw DownloadError.invalideURL(error)
         }
     }
     

@@ -129,7 +129,6 @@ public actor Uploader: NSObject {
     
     /// 업로더 생성
     /// - Parameters:
-    ///   - logLevel: 업로더 내부 로그 출력 레벨 (기본: info)
     ///   - progressInterval: 업로드 진행률 이벤트 수신 간격 (기본: 10 %)
     ///   - maxActiveTask: 최대 활성화될 task 수 (기본: 1개)
     ///   - willResetDirectory : 업로드 폴더를 비우고 재설정할 것인지 여부 (기본 : false)
@@ -271,7 +270,7 @@ public actor Uploader: NSObject {
             request.httpMethod = fileInfo.httpMethod.rawValue
             return request
         } catch {
-            throw UploadError.invalidURL
+            throw UploadError.invalidURL(error)
         }
     }
     
@@ -372,7 +371,7 @@ public actor Uploader: NSObject {
             
             return dataFileURL
         } catch {
-            throw UploadError.invalidFileURL
+            throw UploadError.invalidFileURL(error)
         }
     }
     

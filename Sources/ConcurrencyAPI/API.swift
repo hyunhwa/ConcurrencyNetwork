@@ -77,8 +77,6 @@ public protocol API {
     var baseUrlString: String { get }
     /// 요청 데이터 객체로 Codable 객체
     var body: Codable? { get }
-    /// 쿠키저장소 (기본 .shared)
-    var cookieStorage: HTTPCookieStorage? { get }
     /// 데이터 요청 헤더 (기본 요청 urlEncoded, 기본 응답 json)
     var headers: [String: String]? { get }
     /// GET or POST 와 같이 통신 방식 설정
@@ -100,74 +98,6 @@ public extension API {
         10
     }
     
-    /// async 방식으로 서버에 데이터를 요청합니다.
-    /// - Parameters:
-    ///   - dateFormat: Data 타입 변환에 쓰일 포맷 문자열
-    func request(
-        dateFormat: String = "yyyy-MM-dd HH:mm:ss"
-    ) async throws {
-        let request: URLRequest
-        do {
-            request = try await urlRequest(dateFormat: dateFormat)
-        } catch { throw error }
-        
-        let responseData: Data
-        let urlResponse: URLResponse
-        do {
-            let (data, response) = try await urlSession.data(for: request)
-            responseData = data
-            urlResponse = response
-        } catch { throw error }
-        
-        guard urlResponse.isOK
-        else {
-            let statusCode = urlResponse.httpStatusCode
-            if let contents = responseData.encodedString,
-               contents.isHtmlString
-            { throw APIError.serverErrorHtml(contents, statusCode)
-            } else { throw APIError.serverError(statusCode) }
-        }
-    }
-    
-    /// async 방식으로 서버에 데이터를 요청하여 Codable 객체를 넘겨받습니다.
-    ///
-    /// - Parameters:
-    ///   - codable: 응답받을 Codable 객체 타입
-    ///   - dateFormat: Data 타입 변환에 쓰일 포맷 문자열
-    /// - Returns: 응답받을 Codable 객체
-    func request<T: Codable>(
-        responseAs codable: T.Type,
-        dateFormat: String = "yyyy-MM-dd HH:mm:ss"
-    ) async throws -> T {
-        let request: URLRequest
-        do { request = try await urlRequest(dateFormat: dateFormat)
-        } catch { throw error }
-        
-        let responseData: Data
-        let urlResponse: URLResponse
-        do {
-            let (data, response) = try await urlSession.data(for: request)
-            responseData = data
-            urlResponse = response
-        } catch { throw error }
-        
-        guard urlResponse.isOK
-        else {
-            let statusCode = urlResponse.httpStatusCode
-            if let contents = responseData.encodedString,
-               contents.isHtmlString
-            { throw APIError.serverErrorHtml(contents, statusCode) }
-            else { throw APIError.serverError(statusCode) }
-        }
-        
-        do {
-            return try responseData.decodedResponse(
-                codable,
-                dateFormat: dateFormat
-            )
-        } catch { throw error }
-    }
-    
     var endpointURL: URL {
         get throws {
             let urlString = baseUrlString + path
@@ -185,20 +115,12 @@ public extension API {
         }
     }
     
-    private var urlSession: URLSession {
-        let configuration = URLSessionConfiguration.default
-        configuration.httpCookieStorage = cookieStorage
-        return URLSession(configuration: configuration)
-    }
-    
-    private func urlRequest(
-        dateFormat _: String
-    ) async throws -> URLRequest {
+    func request() async throws -> URLRequest {
         var url: URL
         do {
             url = try endpointURL
         } catch {
-            throw APIError.invalideURL
+            throw APIError.invalideURL(error)
         }
         
         var urlRequest = URLRequest(url: url, timeoutInterval: timeoutInterval)
@@ -211,7 +133,7 @@ public extension API {
             urlRequest.httpBody = try httpBody(url: url)
             return urlRequest
         } catch {
-            throw APIError.encodingError
+            throw APIError.encodingError(error)
         }
     }
     
@@ -226,5 +148,68 @@ public extension API {
     private func httpBody(url: URL) throws -> Data? {
         guard let bodyObject = body else { return nil }
         return try bodyObject.httpBodyData(url: url)
+    }
+}
+
+public extension URLRequest {
+    /// async 방식으로 서버에 데이터를 요청합니다.
+    /// - Parameters:
+    ///   - session: 데이터 요청 세션
+    func response(
+        session: URLSession = .shared
+    ) async throws -> URLResponse {
+        let responseData: Data
+        let urlResponse: URLResponse
+        do {
+            let (data, response) = try await session.data(for: self)
+            responseData = data
+            urlResponse = response
+        } catch { throw error }
+        
+        guard urlResponse.isOK == false
+        else { return urlResponse }
+        
+        let statusCode = urlResponse.httpStatusCode
+        if let contents = responseData.encodedString,
+           contents.isHtmlString
+        { throw APIError.serverErrorHtml(contents, statusCode) }
+        else { throw APIError.serverError(statusCode) }
+    }
+    
+    /// async 방식으로 서버에 데이터를 요청하여 Codable 객체를 넘겨받습니다.
+    /// - Parameters:
+    ///   - codable: 응답받을 Codable 객체 타입
+    ///   - session: 데이터 요청 세션
+    ///   - dateFormat: Data 타입 변환에 쓰일 포맷 문자열
+    /// - Returns: (응답받을 Codable 객체, 응답)
+    func response<T: Codable>(
+        _ codable: T.Type,
+        session: URLSession = .shared,
+        dateFormat: String = "yyyy-MM-dd HH:mm:ss"
+    ) async throws -> (T, URLResponse) {
+        let responseData: Data
+        let urlResponse: URLResponse
+        do {
+            let (data, response) = try await session.data(for: self)
+            responseData = data
+            urlResponse = response
+        } catch { throw error }
+        
+        guard urlResponse.isOK
+        else {
+            let statusCode = urlResponse.httpStatusCode
+            if let contents = responseData.encodedString,
+               contents.isHtmlString
+            { throw APIError.serverErrorHtml(contents, statusCode) }
+            else { throw APIError.serverError(statusCode) }
+        }
+        
+        do {
+            let responseObject = try responseData.decodedResponse(
+                codable,
+                dateFormat: dateFormat
+            )
+            return (responseObject, urlResponse)
+        } catch { throw error }
     }
 }

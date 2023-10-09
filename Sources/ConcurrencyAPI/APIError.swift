@@ -8,9 +8,9 @@
 import Foundation
 
 public enum APIError: Error, Equatable {
-    case invalideURL
-    case decodingError
-    case encodingError
+    case invalideURL(Error)
+    case decodingError(Error)
+    case encodingError(Error)
     case failureObject(Codable)
     case failureReason(String)
     case serverError(Int)

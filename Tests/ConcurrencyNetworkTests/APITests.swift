@@ -10,13 +10,14 @@ import XCTest
 
 final class APITests: XCTestCase {
     func testNoRequestParam() async throws {
-        let response = try await GithubAPI
+        let request = try await GithubAPI
             .emojis
-            .request(
-                responseAs: [String: String].self
-            )
+            .request()
+        dump(request)
+        
+        let (object, response) = try await request.response([String: String].self)
         dump(response)
-        XCTAssertNotNil(response)
+        XCTAssertNotNil(object)
     }
     
     func testRequestParam() async throws {
@@ -26,8 +27,9 @@ final class APITests: XCTestCase {
                 sort: .bestMatch,
                 order: .desc
             )
-            .request(
-                responseAs: SearchRepositoriesResponse.self,
+            .request()
+            .response(
+                SearchRepositoriesResponse.self,
                 dateFormat: "yyyy-MM-dd'T'HH:mm:ss'Z'"
             )
         dump(response)

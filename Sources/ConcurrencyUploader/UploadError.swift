@@ -14,9 +14,9 @@ public enum UploadError: Error, Equatable {
     /// 서버 오류 발생 (실패 응답 객체)
     case failureObject(Codable)
     /// URL이 유효하지 않음
-    case invalidURL
+    case invalidURL(Error)
     /// FileURL이 유효하지 않음 (file URL이 아님)
-    case invalidFileURL
+    case invalidFileURL(Error)
     /// 업로드 가능한 파일 용량을 초과함
     case overLimitedFileSize
     /// 서버 오류 발생 (상태코드 포함)

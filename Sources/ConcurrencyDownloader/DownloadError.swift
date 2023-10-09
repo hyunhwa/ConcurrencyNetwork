@@ -12,7 +12,7 @@ public enum DownloadError: Error, Equatable {
     /// 사용자에 의해 디운로드 취소됨
     case canceledByUser
     /// sourceURL 이 유효하지 않음
-    case invalideURL
+    case invalideURL(Error)
     /// destinationURL 이 유효하지 않음 (file URL 이 아님)
     case invalideFileURL
     /// 로컬 파일에 저장된 데이터가 없음

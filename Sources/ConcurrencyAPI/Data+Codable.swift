@@ -30,12 +30,12 @@ extension Data {
         do {
             responseObject = try self.decodedObject(type: T.self, dateFormat: dateFormat)
             return responseObject
-        } catch let APIError.failureObject(failureResponse) {
-            throw APIError.failureObject(failureResponse)
+        } catch let APIError.failureObject(failureObject) {
+            throw APIError.failureObject(failureObject)
         } catch let APIError.failureReason(failureResponse) {
             throw APIError.failureReason(failureResponse)
         } catch {
-            throw APIError.decodingError
+            throw APIError.decodingError(error)
         }
     }
     

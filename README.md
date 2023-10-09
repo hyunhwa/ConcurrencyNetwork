@@ -52,12 +52,91 @@ extension SampleAPI: API {
 }
 ```
 
-async 방식으로 응답 데이터(Codable)를 가져올 수 있습니다.
+Async 방식으로 응답 데이터(Codable)를 가져올 수 있습니다.
 
 ```swift
 struct SampleResponse: Codable, Equatable { 
     ... 
 }
 
-let response = try await SampleAPI.getSampleData.request(responseAs: SampleResponse.self)
+let response = try await SampleAPI
+    .getSampleData
+    .request()
+    .response(SampleResponse.self)
+```
+
+### 다운로드 요청
+
+아래와 같이 Downloadable 프로토콜을 구현합니다.
+
+```swift
+struct DownloadableObject {
+    let fileURL: URL
+}
+
+extension DownloadableObject: Downloadable {
+    var directoryURL: URL {
+        let directoryPaths = NSSearchPathForDirectoriesInDomains(
+            .libraryDirectory,
+            .userDomainMask,
+            true
+        )
+        
+        let directoryURL = URL(fileURLWithPath: directoryPaths.first!)
+        return directoryURL.appendingPathComponent("ConcurrencyDownload")
+    }
+    
+    var sourceURL: URL {
+        get throws {
+            fileURL
+        }
+    }
+}
+```
+
+다운로더 객체를 선언합니다.
+
+```swift
+let downloader = Downloader(
+    progressInterval: 1, // 진행률 업데이트 이벤트를 수신 간격
+    maxActiveTask: 1 // 동시에 활성화될 downloadTask 숫자
+)
+```
+
+단일 다운로드 이벤트를 수신하기 위해서 다음과 같이 호출 가능합니다.
+
+```swift
+for try await event in try await downloader.events(
+    fileInfo: downloadableObject
+) {
+    switch event {
+    // 다운로드 진행률
+    case let .update(currentBytes, totalBytes):
+    // 다운로드 완료
+    case let .completed(data, downloadInfo):
+    // 다운로드 시작
+    case let .start(index, _):
+}
+```
+
+멀티 다운로드 이벤트를 수신하실 때는 다음과 같이 호출 가능합니다.
+```swift
+for try await event in try await downloader.events(
+    fileInfos: downloadableObjects
+) {
+    switch event {
+    // 전체 다운로드 완료
+    case .allCompleted(downloadInfos):
+    // 단일 다운로드 이벤트 수신
+    case let .unit(unitEvents):
+        for try await unitEvent in unitEvents {
+            switch unitEvent {
+            case let .completed(data, downloadInfo):
+            case let .update(currentBytes, totalBytes):
+            case let .start(index, _):
+        }
+    // 전체 다운로드 시작
+    case let .start(downloadInfos: downloadInfos):
+    }
+}
 ```
