@@ -106,11 +106,7 @@ public actor Uploader: NSObject {
     /// 진행률 디버깅 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
     var progressInterval: Double
     /// 업로더에 사용될 세션
-    lazy var session: URLSession = .init(
-        configuration: configuration,
-        delegate: self,
-        delegateQueue: nil
-    )
+    private var session: URLSession?
     
     /// 세션 설정
     /// - 셀룰러 네트워크 접근 허용
@@ -131,11 +127,9 @@ public actor Uploader: NSObject {
     /// - Parameters:
     ///   - progressInterval: 업로드 진행률 이벤트 수신 간격 (기본: 10 %)
     ///   - maxActiveTask: 최대 활성화될 task 수 (기본: 1개)
-    ///   - willResetDirectory : 업로드 폴더를 비우고 재설정할 것인지 여부 (기본 : false)
     public init(
         progressInterval: Double = 10,
-        maxActiveTask: Int = 1,
-        willResetDirectory: Bool = false
+        maxActiveTask: Int = 1
     ) {
         self.progressInterval = progressInterval
         self.maxActiveTask = min(max(1, maxActiveTask), limitActiveTask)
@@ -144,7 +138,7 @@ public actor Uploader: NSObject {
         
         Task {
             do {
-                try await createUploadFolderIfNeeded(willResetDirectory)
+                try await setupUploadDirectory()
             } catch { }
         }
     }
@@ -220,25 +214,35 @@ public actor Uploader: NSObject {
             }
     }
     
-    /// 업로드 중지
+    /// 업로드 취소
     ///
-    /// 사용자에 의해 업로드를 완전히 종료한다.
-    public func stop() {
-        continuation?.finish(throwing: UploadError.canceledByUser)
-        uploadInfos?.forEach { uploadInfo in
-            stop(uploadInfo: uploadInfo)
-        }
-        uploadInfos = nil
+    /// 사용자에 의한 업로드 취소
+    public func cancel() {
+        stop(UploadError.canceledByUser)
     }
     
-    private func stop(uploadInfo: UploadInfo) {
+    /// 업로드 중지
+    public func stop( _ error: Error? = nil) {
+        continuation?.finish(throwing: error)
+        continuation = nil
+        
+        uploadInfos?.forEach { uploadInfo in
+            stop(uploadInfo: uploadInfo, error: error)
+        }
+        uploadInfos = nil
+        
+        session?.finishTasksAndInvalidate()
+        session = nil
+    }
+    
+    private func stop(uploadInfo: UploadInfo, error: Error?) {
         guard let index = uploadInfos?.index(fileInfo: uploadInfo.fileInfo)
         else { return }
         
         uploadInfos?[index].task?.cancel()
         uploadInfos?[index].task = nil
-        uploadInfos?[index].error = UploadError.canceledByUser
-        uploadInfos?[index].continuation?.finish(throwing: UploadError.canceledByUser)
+        uploadInfos?[index].error = error
+        uploadInfos?[index].continuation?.finish(throwing: error)
     }
     
     /// 업로드를 위한 Root 폴더 URL
@@ -291,19 +295,24 @@ public actor Uploader: NSObject {
         resume(task: uploadInfo.task)
     }
     
+    /// 세션 객체가 없는 경우 생성
+    private func createSessionIfNeeded() {
+        guard session == nil else { return }
+        
+        session = URLSession(
+            configuration: configuration,
+            delegate: self,
+            delegateQueue: nil
+        )
+    }
+    
     /// 업로드 폴더가 필요한 경우 생성
     /// - Parameter willReset: 업로드 폴더 초기화 필요 (true 시 삭제 후 재생성)
-    private func createUploadFolderIfNeeded(_ willReset: Bool) throws {
-        if willReset {
-            try deleteUploadFolderIfNeeded()
-        }
+    private func setupUploadDirectory() throws {
+        try deleteUploadFolderIfNeeded()
         
-        let uploadFolderURL = uploadFolderURL.path
-        guard FileManager.default.fileExists(atPath: uploadFolderURL) == false
-        else { return }
-    
         try FileManager.default.createDirectory(
-            atPath: uploadFolderURL,
+            atPath: uploadFolderURL.path,
             withIntermediateDirectories: true,
             attributes: nil
         )
@@ -324,6 +333,7 @@ public actor Uploader: NSObject {
         _ uploadInfo: UploadInfo
     ) async throws -> AsyncThrowingStream<UploadEvent, Error> {
         let index = uploadInfos!.index(fileInfo: uploadInfo.fileInfo)!
+        createSessionIfNeeded()
         
         return AsyncThrowingStream<UploadEvent, Error> { continuation in
             uploadInfos![index].continuation = continuation
@@ -331,7 +341,7 @@ public actor Uploader: NSObject {
             Task {
                 let boundary = uploadInfo.id.uuidString
                 let fileURL = try await dataFileURLToUpload(uploadInfo)
-                let uploadTask = try await session.uploadTask(
+                let uploadTask = try await session?.uploadTask(
                     with: request(fileInfo: uploadInfo.fileInfo, boundary: boundary),
                     fromFile: fileURL
                 )

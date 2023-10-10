@@ -67,21 +67,16 @@ final class DownloaderTests: XCTestCase {
     }
     
     func testMultiDownload() async throws {
-        guard let lastEmojiSlice = downloadEmojiInfos?.suffix(5)
-        else {
-            XCTAssertThrowsError(DownloadTestError.notEnoughEmojis)
-            return
-        }
-        let fileInfos: [DownloadableEmojiInfo] = Array(lastEmojiSlice)
+        let lastEmojiInfos = try lastEmojiInfos(maxLength: 3)
         
         for try await event in try await downloader.events(
-            fileInfos: fileInfos
+            fileInfos: lastEmojiInfos
         ) {
             switch event {
             case let .allCompleted(downloadInfos):
                 let downloadedFileInfos = downloadInfos.filter { $0.isCompleted }
                 XCTAssertTrue(
-                    downloadedFileInfos.count == fileInfos.count,
+                    downloadedFileInfos.count == lastEmojiInfos.count,
                     "다운로드 완료 후 파일 갯수가 요청된 파일 갯수와 다름"
                 )
                 return
@@ -111,5 +106,64 @@ final class DownloaderTests: XCTestCase {
                 print("downloadInfos.count : \(downloadInfos.count)")
             }
         }
+    }
+    
+    /// 다운로드 일시정지 후 다운로드
+    func testPauseDownload() async throws {
+        let lastEmojiInfos = try lastEmojiInfos(maxLength: 10)
+        
+        _ = try await downloader.events(fileInfos: lastEmojiInfos)
+        
+        try await Task.sleep(nanoseconds: NSEC_PER_SEC)
+        
+        await downloader.pause()
+        
+        try await Task.sleep(nanoseconds: 5 * NSEC_PER_SEC)
+        
+        await downloader.resume()
+        
+        try await Task.sleep(nanoseconds: 5 * NSEC_PER_SEC)
+    }
+    
+    /// 다운로드 일시정지 후 다운로드
+    func testStopDownload() async throws {
+        let firstEmojiInfos = try firstEmojiInfos(maxLength: 10)
+        let lastEmojiInfos = try lastEmojiInfos(maxLength: 10)
+        
+        _ = try await downloader.events(fileInfos: firstEmojiInfos)
+        
+        try await Task.sleep(nanoseconds: 3 * NSEC_PER_SEC)
+        
+        await downloader.stop()
+        
+        try await Task.sleep(nanoseconds: 2 * NSEC_PER_SEC)
+        
+        await downloader.resume()
+        
+        try await Task.sleep(nanoseconds: 2 * NSEC_PER_SEC)
+        
+        _ = try await downloader.events(fileInfos: lastEmojiInfos)
+        
+        try await Task.sleep(nanoseconds: 3 * NSEC_PER_SEC)
+    }
+    
+    /// 전체 이모지 리스트에서 앞에서 추출한 일부 이모지 리스트
+    /// - Parameter maxLength: 자를 문자열 길이
+    /// - Returns: 다운로드 받을 이모지 리스트
+    private func firstEmojiInfos(maxLength: Int) throws -> [DownloadableEmojiInfo] {
+        guard let firstEmojiSlice = downloadEmojiInfos?.prefix(maxLength)
+        else { throw DownloadTestError.notEnoughEmojis }
+        
+        return Array(firstEmojiSlice)
+    }
+    
+    /// 전체 이모지 리스트에서 ㅇ에서 추출한 일부 이모지 리스트
+    /// - Parameter maxLength: 자를 문자열 길이
+    /// - Returns: 다운로드 받을 이모지 리스트
+    private func lastEmojiInfos(maxLength: Int) throws -> [DownloadableEmojiInfo] {
+        guard let lastEmojiSlice = downloadEmojiInfos?.suffix(maxLength)
+        else { throw DownloadTestError.notEnoughEmojis }
+        
+        return Array(lastEmojiSlice)
     }
 }

@@ -96,11 +96,7 @@ public actor Downloader: NSObject {
     /// 진행률 디버깅 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
     private var progressInterval: Double
     
-    private lazy var session: URLSession = .init(
-        configuration: configuration,
-        delegate: self,
-        delegateQueue: nil
-    )
+    private var session: URLSession?
     
     /// 세션 설정
     /// - 셀룰러 네트워크 접근 허용
@@ -143,7 +139,6 @@ public actor Downloader: NSObject {
                     of: AsyncThrowingStream<DownloadEvent, Error>.self
                 ) { group in
                     for downloadInfo in downloadInfos {
-                        let sourceURL = try? downloadInfo.fileInfo.sourceURL
                         group.addTask {
                             let event = try await self.download(downloadInfo)
                             continuation.yield(.unit(event))
@@ -179,25 +174,39 @@ public actor Downloader: NSObject {
             }
     }
     
-    /// 다운로드 중지
+    /// 다운로드 취소
     ///
-    /// 사용자에 의해 다운로드를 완전히 종료한다.
-    public func stop() {
-        continuation?.finish(throwing: DownloadError.canceledByUser)
-        downloadInfos?.forEach { downloadInfo in
-            stop(downloadInfo: downloadInfo)
-        }
-        downloadInfos = nil
+    /// 사용자에 의한 취소
+    public func cancel() {
+        stop(DownloadError.canceledByUser)
     }
     
-    private func stop(downloadInfo: DownloadInfo) {
+    /// 다운로드 중지
+    public func stop( _ error: Error? = nil) {
+        continuation?.finish(throwing: error)
+        continuation = nil
+        
+        downloadInfos?.forEach { downloadInfo in
+            stop(downloadInfo: downloadInfo, error: error)
+        }
+        downloadInfos = nil
+        
+        session?.finishTasksAndInvalidate()
+        session = nil
+    }
+    
+    private func stop(
+        downloadInfo: DownloadInfo,
+        error: Error?
+    ) {
         guard let index = downloadInfos?.index(of: downloadInfo) else { return }
         
         downloadInfos?[index].resumeData = nil
         downloadInfos?[index].downloadTask?.cancel()
         downloadInfos?[index].downloadTask = nil
-        downloadInfos?[index].error = DownloadError.canceledByUser
-        downloadInfos?[index].continuation?.finish(throwing: DownloadError.canceledByUser)
+        downloadInfos?[index].error = error
+        downloadInfos?[index].continuation?.finish(throwing: error)
+        downloadInfos?[index].continuation = nil
     }
     
     /// 다운로드 재시작
@@ -224,8 +233,9 @@ public actor Downloader: NSObject {
         try createDownloadFolderIfNeeded(
             path: downloadInfo.fileInfo.directoryURL.path
         )
+        createSessionIfNeeded()
         
-        let downloadTask = try await session.downloadTask(
+        let downloadTask = try await session?.downloadTask(
             with: request(fileInfo: downloadInfo.fileInfo)
         )
         
@@ -252,6 +262,17 @@ public actor Downloader: NSObject {
         )
     }
     
+    /// 세션 객체가 없는 경우 생성
+    private func createSessionIfNeeded() {
+        guard session == nil else { return }
+        
+        session = URLSession(
+            configuration: configuration,
+            delegate: self,
+            delegateQueue: nil
+        )
+    }
+    
     /// 다운로드 시작 (재시작)
     /// - Parameter task: 다운로드 테스크
     private func resume(task: URLSessionDownloadTask?) {
@@ -267,7 +288,7 @@ public actor Downloader: NSObject {
     private func pause(downloadInfo: DownloadInfo) async {
         if let resumeData = await downloadInfo.downloadTask?.cancelByProducingResumeData() {
             if let index = downloadInfos?.index(of: downloadInfo) {
-                let taskWithResumeData = session.downloadTask(withResumeData: resumeData)
+                let taskWithResumeData = session?.downloadTask(withResumeData: resumeData)
                 downloadInfos?[index].resumeData = resumeData
                 downloadInfos?[index].downloadTask = taskWithResumeData
             }
@@ -407,7 +428,7 @@ extension Downloader: URLSessionDelegate {
     ///   - task: 다운로드 Task
     ///   - error: 다운로드 중 발생된 에러 (resumeData를 가져올 수 있는 경우 저장됨)
     private func urlSession(
-        _: URLSession,
+        _ session: URLSession,
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) async {
@@ -433,12 +454,21 @@ extension Downloader: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        Task {
-            await urlSession(
-                session,
-                downloadTask: downloadTask,
-                didFinishDownloadingTo: location
-            )
+        if let data = try? Data(contentsOf: location) {
+            Task {
+                await urlSession(
+                    session,
+                    downloadTask: downloadTask,
+                    didFinishDownloaded: data
+                )
+            }
+        } else {
+            Task {
+                await didFinishDownloading(
+                    withTask: downloadTask,
+                    error: DownloadError.noDataInLocal
+                )
+            }
         }
     }
     
@@ -464,20 +494,12 @@ extension Downloader: URLSessionDownloadDelegate {
     /// 다운로드 완료를 추적하기 위한 비동기 함수(동일함수명의 동기함수에서 호출됨)
     /// - Parameters:
     ///   - downloadTask: 다운로드 Task
-    ///   - location: 다운로드받은 임시파일 URL
+    ///   - location: 다운로드받은 임시파일 데이터
     private func urlSession(
         _: URLSession,
         downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
+        didFinishDownloaded data: Data
     ) async {
-        // * 용량이 작은 파일의 경우 함수 호출과 동시에 임시파일이 삭제되는 이슈가 있음
-        // * 임시파일 삭제 전에 데이터를 가져오기 위해 가능한 이른 시점에 데이터 추출
-        guard let data = try? Data(contentsOf: location)
-        else {
-            didFinishDownloading(withTask: downloadTask, error: DownloadError.noDataInLocal)
-            return
-        }
-        
         guard downloadTask.response?.isOK ?? false
         else { // 서버 오류 발생시 오류 반환
             didFinishDownloading(withTask: downloadTask, error: DownloadError.serverError)
