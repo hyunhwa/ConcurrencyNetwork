@@ -45,8 +45,7 @@ import Foundation
 /// 단일 업로드 이벤트를 수신하기 위해서는 다음과 같이 호출 가능합니다.
 /// ```swift
 /// let uploader = Uploader(
-///     progressInterval: 10, // 업로드 진행률 이벤트 수신 간격
-///     maxActiveTask: 5    // 동시 활성화될 uploadTask 숫자 (1로 설정 시 순차 업로드)
+///     progressInterval: 10 // 업로드 진행률 이벤트 수신 간격
 /// )
 ///
 /// for try await event in try await uploader.events(
@@ -95,19 +94,14 @@ import Foundation
 /// }
 /// ```
 public actor Uploader: NSObject {
-    /// 최대 활성화 Task 수 (성능 이슈를 감안하여 5로 제한)
-    let limitActiveTask = 5
     /// 업로드 정보 리스트
     var uploadInfos: [UploadInfo]?
     /// 멀티 업로드 이벤트 흐름
     var continuation: AsyncThrowingStream<MultiUploadEvent, Error>.Continuation?
-    /// 동시에 활성화 가능한 최대 Task 수
-    var maxActiveTask: Int
-    /// 진행률 디버깅 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
-    var progressInterval: Double
+    /// 진행률 갱신 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
+    private var progressInterval: Double
     /// 업로더에 사용될 세션
     private var session: URLSession?
-    
     /// 세션 설정
     /// - 셀룰러 네트워크 접근 허용
     /// - 네트워크 연결 대기
@@ -116,7 +110,7 @@ public actor Uploader: NSObject {
         configuration.allowsCellularAccess = true
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = true
-        configuration.httpMaximumConnectionsPerHost = maxActiveTask
+        configuration.httpMaximumConnectionsPerHost = 1
         configuration.networkServiceType = .background
         configuration.httpShouldUsePipelining = false
         configuration.waitsForConnectivity = true
@@ -124,23 +118,10 @@ public actor Uploader: NSObject {
     }
     
     /// 업로더 생성
-    /// - Parameters:
-    ///   - progressInterval: 업로드 진행률 이벤트 수신 간격 (기본: 10 %)
-    ///   - maxActiveTask: 최대 활성화될 task 수 (기본: 1개)
-    public init(
-        progressInterval: Double = 10,
-        maxActiveTask: Int = 1
-    ) {
+    /// - Parameter progressInterval: 진행률 갱신 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
+    public init(progressInterval: Double = 1) {
         self.progressInterval = progressInterval
-        self.maxActiveTask = min(max(1, maxActiveTask), limitActiveTask)
-        
         super.init()
-        
-        Task {
-            do {
-                try await setupUploadDirectory()
-            } catch { }
-        }
     }
     
     /// 멀티 업로드 이벤트 흐름
@@ -148,23 +129,23 @@ public actor Uploader: NSObject {
     /// - Returns: 멀티 업로드 이벤트 흐름 (단일 이벤트 포함)
     public func events(
         fileInfos: [any Uploadable]
-    ) async throws -> AsyncThrowingStream<MultiUploadEvent, Error> {
+    ) -> AsyncThrowingStream<MultiUploadEvent, Error> {
         let uploadInfos = fileInfos.map { fileInfo in
             UploadInfo(fileInfo: fileInfo)
         }
         self.uploadInfos = uploadInfos
         
-        return AsyncThrowingStream<MultiUploadEvent, Error> { continuation in
+        return AsyncThrowingStream { continuation in
             self.continuation = continuation
             continuation.yield(.start(uploadInfos: uploadInfos))
             
             Task {
                 await withThrowingTaskGroup(
                     of: AsyncThrowingStream<UploadEvent, Error>.self
-                ) { group in
+                ) { [unowned self] group in
                     for uploadInfo in uploadInfos {
                         group.addTask {
-                            let event = try await self.upload(uploadInfo)
+                            let event = await self.upload(uploadInfo)
                             continuation.yield(.unit(event))
                             return event
                         }
@@ -179,11 +160,11 @@ public actor Uploader: NSObject {
     /// - Returns: 단일 업로드 이벤트 흐름
     public func events(
         fileInfo: any Uploadable
-    ) async throws -> AsyncThrowingStream<UploadEvent, Error> {
+    ) -> AsyncThrowingStream<UploadEvent, Error> {
         let uploadInfo = UploadInfo(fileInfo: fileInfo)
         self.uploadInfos = [uploadInfo]
         
-        return try await upload(uploadInfo)
+        return upload(uploadInfo)
     }
  
     /// 업로드 재시작
@@ -263,27 +244,25 @@ public actor Uploader: NSObject {
     private func request(
         fileInfo: any Uploadable,
         boundary: String
-    ) async throws -> URLRequest {
-        do {
-            var request = URLRequest(
-                url: try fileInfo.url,
-                cachePolicy: fileInfo.cachePolicy,
-                timeoutInterval: fileInfo.timeoutInterval
-            )
-            request.allHTTPHeaderFields = fileInfo.header(with: boundary)
-            request.httpMethod = fileInfo.httpMethod.rawValue
-            return request
-        } catch {
-            throw UploadError.invalidURL(error)
-        }
+    ) -> URLRequest {
+        var request = URLRequest(
+            url: fileInfo.url,
+            cachePolicy: fileInfo.cachePolicy,
+            timeoutInterval: fileInfo.timeoutInterval
+        )
+        request.allHTTPHeaderFields = fileInfo.header(with: boundary)
+        request.httpMethod = fileInfo.httpMethod.rawValue
+        return request
     }
     
     /// 다음 업로드할 파일이 있으면 업로드 진행
     /// - Parameter uploadInfo: 업로드할 파일 정보를 특정하고 싶은 경우 설정
     private func runNextIfNeeded(_ uploadInfo: UploadInfo? = nil) {
-        let activeTaskCount = uploadInfos?.activeTaskCount ?? 0
-        guard activeTaskCount < maxActiveTask,
-              let uploadInfo = (uploadInfo ?? uploadInfos?.first { $0.isSuspended })
+        let hasActiveTask = uploadInfos?.hasActiveTask ?? false
+        let nextUploadInfo = uploadInfo ?? uploadInfos?.first { $0.isSuspended }
+        
+        guard hasActiveTask == false, // 업로드 중인 컨텐츠가 없을 때
+              let uploadInfo = nextUploadInfo // 다음 컨텐츠가 있음
         else { return }
         
         if let index = uploadInfos?.index(fileInfo: uploadInfo.fileInfo) {
@@ -307,23 +286,25 @@ public actor Uploader: NSObject {
     }
     
     /// 업로드 폴더가 필요한 경우 생성
-    /// - Parameter willReset: 업로드 폴더 초기화 필요 (true 시 삭제 후 재생성)
-    private func setupUploadDirectory() throws {
-        try deleteUploadFolderIfNeeded()
-        
-        try FileManager.default.createDirectory(
-            atPath: uploadFolderURL.path,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-    }
-    
-    /// 업로드 폴더 삭제가 필요한 경우 삭제
-    private func deleteUploadFolderIfNeeded() throws {
+    public func deleteUploadDirectory() throws {
         guard FileManager.default.fileExists(atPath: uploadFolderURL.path)
         else { return }
 
         try FileManager.default.removeItem(atPath: uploadFolderURL.path)
+    }
+    
+    /// 업로드할 폴더 경로가 없는 경우 생성
+    private func createUploadFolderIfNeeded() throws {
+        let path = uploadFolderURL.path
+        
+        guard FileManager.default.fileExists(atPath: path) == false
+        else { return }
+    
+        try FileManager.default.createDirectory(
+            atPath: path,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
     }
     
     /// 파일 업로드 이벤트 흐름 (이벤트 추적 시작)
@@ -331,17 +312,21 @@ public actor Uploader: NSObject {
     /// - Returns: 단일 업로드 이벤트 흐름
     private func upload(
         _ uploadInfo: UploadInfo
-    ) async throws -> AsyncThrowingStream<UploadEvent, Error> {
+    ) -> AsyncThrowingStream<UploadEvent, Error> {
         let index = uploadInfos!.index(fileInfo: uploadInfo.fileInfo)!
+        
+        do { try createUploadFolderIfNeeded() }
+        catch { stop(error) }
+        
         createSessionIfNeeded()
         
-        return AsyncThrowingStream<UploadEvent, Error> { continuation in
+        return AsyncThrowingStream { continuation in
             uploadInfos![index].continuation = continuation
             
-            Task {
+            do {
                 let boundary = uploadInfo.id.uuidString
-                let fileURL = try await dataFileURLToUpload(uploadInfo)
-                let uploadTask = try await session?.uploadTask(
+                let fileURL = try dataFileURLToUpload(uploadInfo)
+                let uploadTask = session?.uploadTask(
                     with: request(fileInfo: uploadInfo.fileInfo, boundary: boundary),
                     fromFile: fileURL
                 )
@@ -351,6 +336,8 @@ public actor Uploader: NSObject {
                 
                 try checkLimitedFileSize(uploadInfos![index])
                 runNextIfNeeded(uploadInfos![index])
+            } catch {
+                stop(error)
             }
         }
     }
@@ -362,7 +349,7 @@ public actor Uploader: NSObject {
     /// - Returns: 업로드할 파일 경로
     private func dataFileURLToUpload(
         _ uploadInfo: UploadInfo
-    ) async throws -> URL {
+    ) throws -> URL {
         let uuid = uploadInfo.id.uuidString
         let dataFileURL = uploadFolderURL.appendingPathComponent(uuid)
         
@@ -372,7 +359,7 @@ public actor Uploader: NSObject {
         do {
             let bodyObject = try bodyObject(
                 with: uuid,
-                fileURLs: try await fileURLsToUpload(uploadInfo),
+                fileURLs: try fileURLsToUpload(uploadInfo),
                 name: uploadInfo.fileInfo.content.name,
                 parameters: uploadInfo.fileInfo.bodyParams
             )
@@ -411,7 +398,7 @@ public actor Uploader: NSObject {
     /// - Returns: 업로드할 파일 경로
     private func fileURLsToUpload(
         _ uploadInfo: UploadInfo
-    ) async throws -> [URL] {
+    ) throws -> [URL] {
         switch uploadInfo.fileInfo.content {
         case let .data(data, _, fileName, _):
             let fileURL = uploadFolderURL.appendingPathComponent(fileName)
@@ -551,7 +538,9 @@ extension Uploader: URLSessionTaskDelegate {
         totalBytesSent: Int64,
         totalBytesExpectedToSend: Int64
     ) async {
-        let index = uploadInfos?.index(withTask: task) ?? 0
+        guard let index = uploadInfos?.index(withTask: task)
+        else { return }
+        
         let beforeBytes = uploadInfos?[index].currentBytes ?? 0
         let currentBytes = Double(totalBytesSent)
         let totalBytes = Double(totalBytesExpectedToSend)
@@ -560,11 +549,8 @@ extension Uploader: URLSessionTaskDelegate {
         let currentProgress = floor(currentBytes * 100 / totalBytes)
         let canUpdateProgress = abs(currentProgress - beforeProgress) >= progressInterval
         
-        guard canUpdateProgress else { return }
-        
         uploadInfos?[index].currentBytes = currentBytes
         uploadInfos?[index].totalBytes = totalBytes
-        
         uploadInfos?[index].continuation?.yield(
             .update(
                 currentBytes: currentBytes,

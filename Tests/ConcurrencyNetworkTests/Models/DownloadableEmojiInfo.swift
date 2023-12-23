@@ -25,8 +25,6 @@ extension DownloadableEmojiInfo: Downloadable {
     }
     
     var sourceURL: URL {
-        get throws {
-            fileURL
-        }
+        fileURL
     }
 }

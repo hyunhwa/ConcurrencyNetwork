@@ -10,10 +10,7 @@ import XCTest
 
 final class DownloaderTests: XCTestCase {
     var downloadEmojiInfos: [DownloadableEmojiInfo]?
-    let downloader = Downloader(
-        progressInterval: 1,
-        maxActiveTask: 1
-    )
+    let downloader = Downloader()
     
     private enum DownloadTestError: Error {
         case noDownloadInfo
@@ -36,6 +33,7 @@ final class DownloaderTests: XCTestCase {
         downloadEmojiInfos = emojiInfos
     }
 
+    /// 단일 다운로드 테스트
     func testUnitDownload() async throws {
         guard let downloadEmojiInfo = downloadEmojiInfos?.first else {
             XCTAssertThrowsError(DownloadTestError.noDownloadInfo)
@@ -47,21 +45,26 @@ final class DownloaderTests: XCTestCase {
         ) {
             switch event {
             case let .update(currentBytes, totalBytes):
+                log("🆙 \(currentBytes)/\(totalBytes)")
                 if currentBytes > totalBytes {
                     XCTAssertTrue(
                         currentBytes <= totalBytes,
                         "다운로드된 데이터가 예상 다운로드 데이터보다 큼"
                     )
                 }
+                
             case let .completed(data, downloadInfo):
-                print("Local FileURL: \(downloadInfo.fileInfo.destinationURL)")
+                let destinationURL = downloadInfo.fileInfo.destinationURL
+                log("⏹️ \(destinationURL)")
                 XCTAssertTrue(
                     data.count > 0,
                     "다운로드된 임시 로컬파일의 데이터가 없음"
                 )
                 XCTAssertTrue(downloadInfo.isCompleted, "다운로드 완료 상태")
-            case let .start(index, _):
-                print("index : \(index)")
+                
+            case let .start(index, downloadInfo):
+                let sourceURL = downloadInfo.fileInfo.sourceURL
+                log("▶️ [\(index)] \(String(describing: sourceURL))")
             }
         }
     }
@@ -69,11 +72,12 @@ final class DownloaderTests: XCTestCase {
     func testMultiDownload() async throws {
         let lastEmojiInfos = try lastEmojiInfos(maxLength: 3)
         
-        for try await event in try await downloader.events(
+        for try await event in await downloader.events(
             fileInfos: lastEmojiInfos
         ) {
             switch event {
             case let .allCompleted(downloadInfos):
+                log("⏬⏹️")
                 let downloadedFileInfos = downloadInfos.filter { $0.isCompleted }
                 XCTAssertTrue(
                     downloadedFileInfos.count == lastEmojiInfos.count,
@@ -85,25 +89,30 @@ final class DownloaderTests: XCTestCase {
                 for try await unitEvent in unitEvents {
                     switch unitEvent {
                     case let .completed(data, downloadInfo):
-                        print("Local FileURL: \(downloadInfo.fileInfo.destinationURL)")
+                        let destinationURL = downloadInfo.fileInfo.destinationURL
+                        log("⏹️ \(destinationURL)")
                         XCTAssertTrue(
                             data.count > 0,
                             "다운로드된 임시 로컬파일의 데이터가 없음"
                         )
                         XCTAssertTrue(downloadInfo.isCompleted, "다운로드 완료 상태")
+                        
                     case let .update(currentBytes, totalBytes):
+                        log("🆙 \(currentBytes)/\(totalBytes)")
                         if currentBytes > totalBytes {
                             XCTAssertTrue(
                                 currentBytes <= totalBytes,
                                 "다운로드된 데이터가 예상 다운로드 데이터보다 큼"
                             )
                         }
-                    case let .start(index, _):
-                        print("index : \(index)")
+                        
+                    case let .start(index, downloadInfo):
+                        let sourceURL = downloadInfo.fileInfo.sourceURL
+                        log("▶️ [\(index)] \(String(describing: sourceURL))")
                     }
                 }
             case let .start(downloadInfos: downloadInfos):
-                print("downloadInfos.count : \(downloadInfos.count)")
+                log("⏬▶️ \(downloadInfos.count)")
             }
         }
     }
@@ -112,16 +121,57 @@ final class DownloaderTests: XCTestCase {
     func testPauseDownload() async throws {
         let lastEmojiInfos = try lastEmojiInfos(maxLength: 10)
         
-        _ = try await downloader.events(fileInfos: lastEmojiInfos)
-        
+        for try await event in await downloader.events(
+            fileInfos: lastEmojiInfos
+        ) {
+            switch event {
+            case let .allCompleted(downloadInfos):
+                log("⏬⏹️")
+                let downloadedFileInfos = downloadInfos.filter { $0.isCompleted }
+                XCTAssertTrue(
+                    downloadedFileInfos.count == lastEmojiInfos.count,
+                    "다운로드 완료 후 파일 갯수가 요청된 파일 갯수와 다름"
+                )
+                return
+                
+            case let .unit(unitEvents):
+                for try await unitEvent in unitEvents {
+                    switch unitEvent {
+                    case let .completed(data, downloadInfo):
+                        let destinationURL = downloadInfo.fileInfo.destinationURL
+                        log("⏹️ \(destinationURL)")
+                        XCTAssertTrue(
+                            data.count > 0,
+                            "다운로드된 임시 로컬파일의 데이터가 없음"
+                        )
+                        XCTAssertTrue(downloadInfo.isCompleted, "다운로드 완료 상태")
+                        
+                    case let .update(currentBytes, totalBytes):
+                        log("🆙 \(currentBytes)/\(totalBytes)")
+                        if currentBytes > totalBytes {
+                            XCTAssertTrue(
+                                currentBytes <= totalBytes,
+                                "다운로드된 데이터가 예상 다운로드 데이터보다 큼"
+                            )
+                        }
+                        
+                    case let .start(index, downloadInfo):
+                        let sourceURL = downloadInfo.fileInfo.sourceURL
+                        log("▶️ [\(index)] \(String(describing: sourceURL))")
+                    }
+                }
+            case let .start(downloadInfos: downloadInfos):
+                log("⏬▶️ \(downloadInfos.count)")
+            }
+        }
         try await Task.sleep(nanoseconds: NSEC_PER_SEC)
         
         await downloader.pause()
-        
-        try await Task.sleep(nanoseconds: 5 * NSEC_PER_SEC)
+        log("pause")
+        try await Task.sleep(nanoseconds: 2 * NSEC_PER_SEC)
         
         await downloader.resume()
-        
+        log("resume")
         try await Task.sleep(nanoseconds: 5 * NSEC_PER_SEC)
     }
     
@@ -130,23 +180,25 @@ final class DownloaderTests: XCTestCase {
         let firstEmojiInfos = try firstEmojiInfos(maxLength: 10)
         let lastEmojiInfos = try lastEmojiInfos(maxLength: 10)
         
-        _ = try await downloader.events(fileInfos: firstEmojiInfos)
+        _ = await downloader.events(fileInfos: firstEmojiInfos)
         
         try await Task.sleep(nanoseconds: 3 * NSEC_PER_SEC)
         
         await downloader.stop()
-        
         try await Task.sleep(nanoseconds: 2 * NSEC_PER_SEC)
         
         await downloader.resume()
         
         try await Task.sleep(nanoseconds: 2 * NSEC_PER_SEC)
         
-        _ = try await downloader.events(fileInfos: lastEmojiInfos)
+        _ = await downloader.events(fileInfos: lastEmojiInfos)
         
         try await Task.sleep(nanoseconds: 3 * NSEC_PER_SEC)
     }
-    
+}
+
+// MARK: - Helper
+extension DownloaderTests {
     /// 전체 이모지 리스트에서 앞에서 추출한 일부 이모지 리스트
     /// - Parameter maxLength: 자를 문자열 길이
     /// - Returns: 다운로드 받을 이모지 리스트
@@ -165,5 +217,9 @@ final class DownloaderTests: XCTestCase {
         else { throw DownloadTestError.notEnoughEmojis }
         
         return Array(lastEmojiSlice)
+    }
+    
+    private func log(_ message: String) {
+        print("\(Date().timestamp) 🔽\(message)")
     }
 }

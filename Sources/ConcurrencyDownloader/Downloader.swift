@@ -32,9 +32,7 @@ import Foundation
 ///     }
 ///
 ///     var sourceURL: URL {
-///         get throws {
-///             fileURL
-///         }
+///         fileURL
 ///     }
 /// }
 /// ```
@@ -42,9 +40,7 @@ import Foundation
 /// 단일 다운로드 이벤트를 수신하기 위해서 다음과 같이 호출 가능합니다.
 /// ```swift
 /// let downloader = Downloader(
-///     progressInterval: 10, // 진행률 업데이트 이벤트를 수신 간격 (0으로 설정 시 byte 정보가 변경될 때마다 이벤트 수신
-///     maxActiveTask: 2 // 동시에 활성화될 downloadTask 숫자 (1로 설정 시 순차 다운로드)
-/// )
+///     progressInterval: 10 // 진행률 업데이트 이벤트를 수신 간격 (0으로 설정 시 byte 정보가 변경될 때마다 이벤트 수신)
 /// let fileInfo = mockupDownloadableImageInfo1
 /// for try await event in try await downloader.events(fileInfo: fileInfo) {
 ///     switch event {
@@ -84,20 +80,14 @@ import Foundation
 /// }
 /// ```
 public actor Downloader: NSObject {
-    /// 최대 활성화 Task 수 (성능 이슈를 감안하여 5로 제한)
-    let limitActiveTask = 5
-    
     /// 다운로드 받을 파일 정보
     private var downloadInfos: [DownloadInfo]?
     /// 다건 다운로드 이벤트 흐름
     private var continuation: AsyncThrowingStream<MultiDownloadEvent, Error>.Continuation?
-    /// 동시에 활성화 가능한 최대 Task 수 (1~5)
-    private var maxActiveTask: Int
-    /// 진행률 디버깅 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
+    /// 진행률 갱신 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
     private var progressInterval: Double
-    
+    /// 다운로드 세션
     private var session: URLSession?
-    
     /// 세션 설정
     /// - 셀룰러 네트워크 접근 허용
     /// - 네트워크 연결 대기
@@ -108,13 +98,10 @@ public actor Downloader: NSObject {
         return configuration
     }
     
-    public init(
-        progressInterval: Double = 1,
-        maxActiveTask: Int = 1
-    ) {
+    /// 다운로더 생성
+    /// - Parameter progressInterval: 진행률 갱신 간격 (기본 1%) - 0으로 지정한 경우 bytes 정보가 변경될 때마다 이벤트 발생
+    public init(progressInterval: Double = 1) {
         self.progressInterval = progressInterval
-        self.maxActiveTask = min(max(1, maxActiveTask), limitActiveTask)
-        
         super.init()
     }
     
@@ -124,20 +111,20 @@ public actor Downloader: NSObject {
     /// - Returns: 다건 다운로드 이벤트 흐름 (오류 발생 가능성 있음)
     public func events(
         fileInfos: [any Downloadable]
-    ) async throws -> AsyncThrowingStream<MultiDownloadEvent, Error> {
+    ) -> AsyncThrowingStream<MultiDownloadEvent, Error> {
         let downloadInfos = fileInfos.map { fileInfo in
             DownloadInfo(fileInfo: fileInfo)
         }
         self.downloadInfos = downloadInfos
        
-        return AsyncThrowingStream<MultiDownloadEvent, Error> { continuation in
+        return AsyncThrowingStream { continuation in
             self.continuation = continuation
             continuation.yield(.start(downloadInfos: downloadInfos))
             
             Task {
                 await withThrowingTaskGroup(
                     of: AsyncThrowingStream<DownloadEvent, Error>.self
-                ) { group in
+                ) { [unowned self] group in
                     for downloadInfo in downloadInfos {
                         group.addTask {
                             let event = try await self.download(downloadInfo)
@@ -156,11 +143,11 @@ public actor Downloader: NSObject {
     /// - Returns: 단일 다운로드 이벤트 흐름 (오류 발생 가능성 있음)
     public func events(
         fileInfo: any Downloadable
-    ) async throws -> AsyncThrowingStream<DownloadEvent, Error> {
+    ) throws -> AsyncThrowingStream<DownloadEvent, Error> {
         let downloadInfo = DownloadInfo(fileInfo: fileInfo)
-        self.downloadInfos = [downloadInfo]
+        downloadInfos = [downloadInfo]
         
-        return try await download(downloadInfo)
+        return try download(downloadInfo)
     }
     
     /// 다운로드 일시정지
@@ -189,7 +176,10 @@ public actor Downloader: NSObject {
         downloadInfos?.forEach { downloadInfo in
             stop(downloadInfo: downloadInfo, error: error)
         }
-        downloadInfos = nil
+        
+        if error == nil {
+            downloadInfos = nil
+        }
         
         session?.finishTasksAndInvalidate()
         session = nil
@@ -222,30 +212,30 @@ public actor Downloader: NSObject {
         downloadInfos?
             .filter { $0.isCompleted == false }
             .forEach { downloadInfo in
-                self.runNextIfNeeded(downloadInfo)
+                runNextIfNeeded(downloadInfo)
             }
     }
     
     /// 단일 다운로드 실행 (내부 호출용)
     private func download(
         _ downloadInfo: DownloadInfo
-    ) async throws -> AsyncThrowingStream<DownloadEvent, Error> {
+    ) throws -> AsyncThrowingStream<DownloadEvent, Error> {
         try createDownloadFolderIfNeeded(
             path: downloadInfo.fileInfo.directoryURL.path
         )
         createSessionIfNeeded()
         
-        let downloadTask = try await session?.downloadTask(
+        let downloadTask = session?.downloadTask(
             with: request(fileInfo: downloadInfo.fileInfo)
         )
         
-        let sourceURL = try downloadInfo.fileInfo.sourceURL
+        let sourceURL = downloadInfo.fileInfo.sourceURL
         let index = downloadInfos!.index(withURL: sourceURL)!
         downloadInfos![index].downloadTask = downloadTask
         
-        return AsyncThrowingStream<DownloadEvent, Error> { continuation in
+        return AsyncThrowingStream { continuation in
             downloadInfos![index].continuation = continuation
-            self.runNextIfNeeded(downloadInfos![index])
+            runNextIfNeeded(downloadInfos![index])
         }
     }
     
@@ -300,19 +290,15 @@ public actor Downloader: NSObject {
     /// 다운로드 요청 객체
     /// - Parameter fileInfo: 다운로드받을 파일 정보
     /// - Returns: 다운로드 요청 객체
-    private func request(fileInfo: Downloadable) async throws -> URLRequest {
-        do {
-            var request = try URLRequest(
-                url: fileInfo.sourceURL,
-                cachePolicy: fileInfo.cachePolicy,
-                timeoutInterval: fileInfo.timeoutInterval
-            )
-            request.allHTTPHeaderFields = fileInfo.headers
-            request.httpMethod = fileInfo.httpMethod.rawValue
-            return request
-        } catch {
-            throw DownloadError.invalideURL(error)
-        }
+    private func request(fileInfo: Downloadable) -> URLRequest {
+        var request = URLRequest(
+            url: fileInfo.sourceURL,
+            cachePolicy: fileInfo.cachePolicy,
+            timeoutInterval: fileInfo.timeoutInterval
+        )
+        request.allHTTPHeaderFields = fileInfo.headers
+        request.httpMethod = fileInfo.httpMethod.rawValue
+        return request
     }
     
     /// 현재 처리 중인 데이터의 task의 url 정보
@@ -331,10 +317,10 @@ public actor Downloader: NSObject {
         let currentIndex = downloadInfos?.filter { $0.isCompleted }.count
         let isAllCompleted = currentIndex == totalIndex
         
-        self.downloadInfos?[index].continuation?.yield(
+        downloadInfos?[index].continuation?.yield(
             .completed(data: data, downloadInfo: downloadInfos![index])
         )
-        self.downloadInfos?[index].continuation?.finish()
+        downloadInfos?[index].continuation?.finish()
 
         runNextIfNeeded()
         
@@ -342,7 +328,7 @@ public actor Downloader: NSObject {
             continuation?.yield(.allCompleted(downloadInfos!))
             continuation?.finish()
             continuation = nil
-            self.downloadInfos = nil
+            downloadInfos = nil
         }
     }
     
@@ -358,6 +344,7 @@ public actor Downloader: NSObject {
         
         downloadInfos?[index].error = error
         downloadInfos?[index].continuation?.finish(throwing: error)
+        
         runNextIfNeeded()
         
         if isAllCompleted {
@@ -377,7 +364,7 @@ public actor Downloader: NSObject {
         else { return }
         
         guard destinationURL.isFileURL
-        else { throw DownloadError.invalideFileURL }
+        else { throw DownloadError.invalidFileURL }
         
         let created = FileManager.default.createFile(
             atPath: destinationURL.path,
@@ -392,9 +379,11 @@ public actor Downloader: NSObject {
     /// 다운로드받을 수 있는 파일이 있는 경우 다운로드받음
     /// - Parameter downloadInfo: 다운로드받을 파일을 특정하고 싶은 경우 지정
     private func runNextIfNeeded( _ downloadInfo: DownloadInfo? = nil) {
-        let activeTaskCount = downloadInfos?.activeTaskCount ?? 0
-        guard activeTaskCount < maxActiveTask,
-              let downloadInfo = (downloadInfo ?? downloadInfos?.first { $0.isSuspended })
+        let hasActiveTask = downloadInfos?.hasActiveTask ?? false
+        let nextDownloadInfo = downloadInfo ?? downloadInfos?.first { $0.isSuspended }
+        
+        guard hasActiveTask == false, // 다운로드 중인 컨텐츠가 없을 때
+              let downloadInfo = nextDownloadInfo // 다음 컨텐츠가 있음
         else { return }
         
         if let index = downloadInfos?.index(of: downloadInfo) {
@@ -402,6 +391,7 @@ public actor Downloader: NSObject {
                 .start(index: index, downloadInfo: downloadInfo)
             )
         }
+        
         resume(task: downloadInfo.downloadTask)
     }
 }
@@ -526,7 +516,9 @@ extension Downloader: URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) async {
-        let index = downloadInfos?.index(withTask: downloadTask) ?? 0
+        guard let index = downloadInfos?.index(withTask: downloadTask)
+        else { return }
+        
         let beforeBytes = downloadInfos?[index].currentBytes ?? 0
         let currentBytes = Double(totalBytesWritten)
         let totalBytes = Double(totalBytesExpectedToWrite)
@@ -539,7 +531,6 @@ extension Downloader: URLSessionDownloadDelegate {
         
         downloadInfos?[index].currentBytes = currentBytes
         downloadInfos?[index].totalBytes = totalBytes
-        
         downloadInfos?[index].continuation?.yield(
             .update(
                 currentBytes: currentBytes,

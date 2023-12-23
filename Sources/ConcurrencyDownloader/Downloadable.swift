@@ -19,7 +19,7 @@ public protocol Downloadable {
     /// 데이터 요청 헤더 (기본 nil)
     var headers: [String: String]? { get }
     /// 서버에 등록된 파일 URL 문자열 (유효하지 않은 URL 인 경우 오류 발생)
-    var sourceURL: URL { get throws }
+    var sourceURL: URL { get }
     /// 세션 타임 아웃 (기본 10초)
     var timeoutInterval: TimeInterval { get }
 }
@@ -34,7 +34,7 @@ public extension Downloadable {
     }
     
     var fileName: String {
-        (try? sourceURL.lastPathComponent) ?? "Empty"
+        sourceURL.lastPathComponent
     }
     
     var headers: [String: String]? {
@@ -51,7 +51,7 @@ public extension Downloadable {
     }
     
     func isEqual(url: URL?) -> Bool {
-        (try? sourceURL) == url
+        sourceURL == url
     }
 }
 
@@ -61,7 +61,7 @@ extension Array where Element == Downloadable {
     /// - Returns: 파일정보가 일치하는 아이템의 순번
     func index(of fileInfo: any Downloadable) -> Int? {
         firstIndex(
-            where: { $0.isEqual(url: try? fileInfo.sourceURL) }
+            where: { $0.isEqual(url: fileInfo.sourceURL) }
         )
     }
 }

@@ -106,7 +106,7 @@ public extension API {
         do {
             url = try endpointURL
         } catch {
-            throw APIError.invalideURL(error)
+            throw APIError.invalidURL(error)
         }
         
         var urlRequest = URLRequest(url: url, timeoutInterval: timeoutInterval)

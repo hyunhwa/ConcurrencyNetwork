@@ -38,7 +38,7 @@ public struct DownloadInfo: Equatable {
     var continuation: AsyncThrowingStream<DownloadEvent, Error>.Continuation?
     
     public static func == (lhs: DownloadInfo, rhs: DownloadInfo) -> Bool {
-        (try? lhs.fileInfo.sourceURL) == (try? rhs.fileInfo.sourceURL)
+        lhs.fileInfo.sourceURL == rhs.fileInfo.sourceURL
         && lhs.fileInfo.cachePolicy == rhs.fileInfo.cachePolicy
         && lhs.fileInfo.headers == rhs.fileInfo.headers
         && lhs.fileInfo.destinationURL == rhs.fileInfo.destinationURL
@@ -51,8 +51,8 @@ public struct DownloadInfo: Equatable {
 
 extension Array where Element == DownloadInfo {
     /// 활성화된 테스트 수 (다운로드 중인 파일 갯수)
-    var activeTaskCount: Int {
-        filter { $0.isDownloading }.count
+    var hasActiveTask: Bool {
+        filter { $0.isDownloading }.isEmpty == false
     }
     
     /// 다운로드 받을 파일의 URL 정보가 일치하는 아이템의 순번
@@ -60,7 +60,7 @@ extension Array where Element == DownloadInfo {
     /// - Returns: 파일정보가 일치하는 아이템의 순번
     func index(withURL url: URL) -> Int? {
         firstIndex(
-            where: { (try? $0.fileInfo.sourceURL) == url }
+            where: { $0.fileInfo.sourceURL == url }
         )
     }
     
@@ -70,8 +70,7 @@ extension Array where Element == DownloadInfo {
     func index(of downloadInfo: DownloadInfo) -> Int? {
         firstIndex(
             where: {
-                (try? $0.fileInfo.sourceURL)
-                == (try? downloadInfo.fileInfo.sourceURL)
+                $0.fileInfo.sourceURL == downloadInfo.fileInfo.sourceURL
             }
         )
     }
@@ -92,6 +91,6 @@ extension Array where Element == DownloadInfo {
     /// - Returns: 다운로드 중인 URL 문자열
     func urlString(withTask task: URLSessionTask) -> String {
         guard let index = index(withTask: task) else { return "" }
-        return (try? self[index].fileInfo.sourceURL.absoluteString) ?? ""
+        return self[index].fileInfo.sourceURL.absoluteString
     }
 }

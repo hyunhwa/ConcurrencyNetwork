@@ -46,9 +46,9 @@ public struct UploadInfo: Identifiable, Equatable {
 }
 
 extension Array where Element == UploadInfo {
-    /// 활성화된 테스트 수 (업로드 중인 파일 갯수)
-    var activeTaskCount: Int {
-        filter { $0.isUploading }.count
+    /// 활성화된 테스크 여부
+    var hasActiveTask: Bool {
+        filter { $0.isUploading }.isEmpty == false
     }
     
     /// 업로드 받을 파일의 URL 정보가 일치하는 아이템의 순번

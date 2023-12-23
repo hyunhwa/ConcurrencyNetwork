@@ -8,7 +8,7 @@
 import Foundation
 
 public enum APIError: Error, Equatable {
-    case invalideURL(Error)
+    case invalidURL(Error)
     case decodingError(Error)
     case encodingError(Error)
     case failureObject(Codable)
@@ -19,7 +19,7 @@ public enum APIError: Error, Equatable {
     
     public static func == (lhs: APIError, rhs: APIError) -> Bool {
         switch (lhs, rhs) {
-        case (.invalideURL, .invalideURL),
+        case (.invalidURL, .invalidURL),
             (.decodingError, .decodingError),
             (.encodingError, .encodingError),
             (.failureObject, .failureObject),

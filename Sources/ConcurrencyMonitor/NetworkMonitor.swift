@@ -73,6 +73,7 @@ public actor NetworkMonitor {
     public private(set) var isConnected: Bool?
     /// 데이터 셀룰러 상태 여부 확인
     public private(set) var isCellular: Bool?
+    
     public init(
         continuation: AsyncStream<NetworkMonitorEvent>.Continuation? = nil,
         isConnected: Bool? = nil,
@@ -94,26 +95,9 @@ public actor NetworkMonitor {
             }
             
             monitor?.pathUpdateHandler = { path in
-                let isConnected = path.status == .satisfied
-                if isConnected != self.isConnected {
-                    if self.isConnected != nil {
-                        continuation.yield(.updateStatus(isConnected: isConnected))
-                    }
-                    self.isConnected = isConnected
+                Task {
+                    await self.setCurrentPath(path)
                 }
-                
-                let isCellular = path.usesInterfaceType(.cellular)
-                if isCellular != self.isCellular {
-                    if self.isCellular != nil {
-                        continuation.yield(.updateInterfaceType(isCellular: isCellular))
-                    }
-                    self.isCellular = isCellular
-                }
-                
-                if self.currentPath == nil {
-                    continuation.yield(.start(isConnected: isConnected, isCellular: isCellular))
-                }
-                self.currentPath = path
             }
         }
     }
@@ -123,5 +107,39 @@ public actor NetworkMonitor {
         monitor?.cancel()
         monitor = nil
         currentPath = nil
+    }
+    
+    private func setCurrentPath(_ currentPath: NWPath) async {
+        let isConnected = currentPath.status == .satisfied
+        await self.setConnnected(isConnected)
+        
+        let isCellular = currentPath.usesInterfaceType(.cellular)
+        await self.setCellular(isCellular)
+        
+        if self.currentPath == nil {
+            continuation?.yield(.start(isConnected: isConnected, isCellular: isCellular))
+        }
+        
+        self.currentPath = currentPath
+    }
+    
+    private func setConnnected(_ isConnected: Bool) async {
+        guard isConnected != self.isConnected
+        else { return }
+        
+        if self.isConnected != nil {
+            continuation?.yield(.updateStatus(isConnected: isConnected))
+        }
+        self.isConnected = isConnected
+    }
+    
+    private func setCellular(_ isCellular: Bool) async {
+        guard isCellular != self.isCellular
+        else { return }
+        
+        if self.isCellular != nil {
+            continuation?.yield(.updateInterfaceType(isCellular: isCellular))
+        }
+        self.isCellular = isCellular
     }
 }

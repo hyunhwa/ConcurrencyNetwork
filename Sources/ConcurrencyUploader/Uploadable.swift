@@ -11,7 +11,7 @@ import Foundation
 /// 업로드할 파일의 최소한 구성되어야할 정보
 public protocol Uploadable {
     /// 업로드 요청 API URL
-    var url: URL { get throws }
+    var url: URL { get }
     /// 요청 객체에 포함될 Post Body 파라미터 (기본 : nil)
     var bodyParams: [String: String]? { get }
     /// 캐시 정책
